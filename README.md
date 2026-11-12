@@ -16,6 +16,13 @@
   <img alt="status" src="https://img.shields.io/badge/status-research%20preview-8A8496">
 </p>
 
+<p align="center">
+  <img src="assets/preview-chat-1.webp" alt="群聊实录：10 月 27 日下午，琥珀在读书，鲸鱼在群里闹" width="760"><br>
+  <img src="assets/preview-chat-2.webp" alt="群聊实录：10 月 27 日深夜，白龙和鲸鱼挤进大小姐的被窝" width="760">
+</p>
+
+<p align="center"><sub>真实群聊截图 · 2026-10-27 · Claude娘 / GPT娘 / DeepSeek娘</sub></p>
+
 ---
 
 ## 这是什么

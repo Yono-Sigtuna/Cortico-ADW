@@ -1,0 +1,113 @@
+{
+  "version": 2,
+  "round": 3,
+  "document": "C:\\Cortico\\Cortico-main\\docs\\designs\\console-event-window.md",
+  "quality_score": 7,
+  "dimensions": {
+    "completeness": "PASS",
+    "consistency": "ISSUES",
+    "clarity": "ISSUES",
+    "scope": "PASS",
+    "feasibility": "PASS"
+  },
+  "findings": [
+    {
+      "id": "R3-1",
+      "dimension": "consistency",
+      "severity": "blocking",
+      "changed_text": "只清 `internals`（`frame` 不动，补投逻辑要用）",
+      "problem": "§2 与本轮改过的边界表把语义改成「`rebuildTail()` 折叠后 `context.frame` 仍保留，只清 `internals`」，但 §3 形态 A 步骤 3（「回执没有 `frame`（`MISSING_RESULT_RESTART`、折叠、配对修复）」）和边界表「回执不带 `frame`（补回执 / 被折叠 / 修配对）」仍是旧语义，继续把「被折叠」列为没有 frame 的情形。同一条被折叠的事件帧回执因此被判成两种互斥行为：一处要求显示 `S.evwinNoMeta`，另一处（§2 的越界兜底）要求显示 `S.evwinStale`。这两处旧文字还会诱导实现者以为折叠时应删 frame，正好抵消本轮为避免重启重复补投而保留 frame 的修复。",
+      "remedy": "从 §3 步骤 3 和边界表「回执不带 `frame`」一行删掉「折叠」，明确只有 `MISSING_RESULT_RESTART` 与配对修复才产生无 frame 回执；被折叠的回执保留 frame、正文偏移失效，走 `S.evwinStale` 整段显示。Next Steps 4/9 的测试按这两条互斥路径各测一次。"
+    },
+    {
+      "id": "R3-2",
+      "dimension": "clarity",
+      "severity": "minor",
+      "changed_text": null,
+      "problem": "（承 R2-4）Constraints 仍写「三条渲染路径必须同形状：`rebuild()`、`append()`、`f.messages`（fork）」，Success Criteria 仍写「`f.session`、`f.messages`、`rebuild`、`append` 四条入口/路径渲染一致」：约束里 `f.session` 消失，两处枚举不一致，实现者无法确定同形状的验收面到底是三条还是四条。",
+      "remedy": "统一说法：两条入口（`f.session`、`f.messages`）× 两条路径（`rebuild`、`append`），或两处都直接列出相同的四处。"
+    },
+    {
+      "id": "R3-3",
+      "dimension": "clarity",
+      "severity": "minor",
+      "changed_text": null,
+      "problem": "（承 R2-5）浮层降级仍写「附在窗口卡内的静态块」，但形态 C 明确「不建窗口」，它的摘要条在普通 USER 块上；测试桩（无 `getBoundingClientRect`）下形态 C 的浮层降级挂在哪里仍未定义，而 Next Steps 9 又要测「内部唤醒落单」与内容/复制。",
+      "remedy": "改成「附在宿主卡片内（窗口卡或形态 C 的 USER 块）」，并说明形态 C 的静态块挂在哪一层。"
+    },
+    {
+      "id": "R3-4",
+      "dimension": "clarity",
+      "severity": "minor",
+      "changed_text": null,
+      "problem": "（承 R2-6）仍写「`Escape` 与 `tlscroll` 滚动关闭」。`tlscroll` 在代码里只是滚动容器的 class（timeline.ts:117），并没有同名事件；读起来像在监听一个自定义事件，监听目标和事件名不明确。",
+      "remedy": "写明监听 `.tlscroll` 容器的 `scroll` 事件（可复用现有 shouldStick 监听或另挂一个），或改成「时间线滚动时关闭」。"
+    },
+    {
+      "id": "R3-5",
+      "dimension": "clarity",
+      "severity": "minor",
+      "changed_text": null,
+      "problem": "（承 R2-7）Problem Statement 里 `loop.ts:854` 的链接仍是相对路径 `Cortico-main/src/core/loop.ts:854`；从 `docs/designs/` 解析会指向不存在的 `docs/designs/Cortico-main/...`，而本文其他链接（如 `[loop.ts:201]`、`[loop.ts:847]`）仍是 `C:/Cortico/...` 形式。",
+      "remedy": "恢复成与其他链接一致的绝对路径，或统一改成正确的相对路径（`../../src/core/loop.ts`）。"
+    },
+    {
+      "id": "R3-6",
+      "dimension": "clarity",
+      "severity": "minor",
+      "changed_text": "它只带游标与时间",
+      "problem": "这句话不准确：`FrameEventRef` 还带 `type / source / start / chars / tags`（types.ts:316-324）。它想说明的是补投只读 `cursor`，但字面上否认了紧接在后面的前端越界兜底所依赖的 `start/chars` 失效问题，读者会疑惑「偏移失效」指什么。",
+      "remedy": "改写为「它带游标、时间与正文偏移；补投只读游标，偏移失效不影响补投逻辑」，与随后的 `start+chars` 越界兜底自洽。"
+    }
+  ],
+  "prior": [
+    {
+      "id": "R2-1",
+      "status": "resolved",
+      "evidence": "§4 与 Next Steps 8 均改为 8 条并列入 `evwinStale`，§2 用 `S.evwinStale` 标记越界引用；`zh`/`en` 都会补齐该键，Success Criteria 的 `pnpm typecheck:web` 不再缺键。",
+      "current_id": null
+    },
+    {
+      "id": "R2-2",
+      "status": "resolved",
+      "evidence": "§2 改为「`context.frame` 一律不动」，只在 `rebuildTail()` 替换 item 文本时清 `internals`；边界表、Next Steps 3/4 一致，且 Next Steps 4 要求测试「折叠后 `internals` 被清、`frame` 仍在」。`requeueUndelivered()` 只读 `frame.events[].cursor`（loop.ts:918-923），保留 frame 即保住重启去重。",
+      "current_id": null
+    },
+    {
+      "id": "R2-3",
+      "status": "resolved",
+      "evidence": "§3 浮层生命周期新增 `rebuild()` 入口收尾：先关面板、清定时器、清 `pendingPrompts`／`windowByCall`，再 `inner.replaceChildren()`；Next Steps 7 记为「`rebuild()`／abort 双收尾」。该收尾在空 session 与 keepScroll 两个早退之前执行。",
+      "current_id": null
+    },
+    {
+      "id": "R2-4",
+      "status": "persisting",
+      "evidence": "Constraints 仍写「三条渲染路径必须同形状：`rebuild()`、`append()`、`f.messages`（fork）」，Success Criteria 仍写「`f.session`、`f.messages`、`rebuild`、`append` 四条入口/路径渲染一致」，两处枚举仍不一致。",
+      "current_id": "R3-2"
+    },
+    {
+      "id": "R2-5",
+      "status": "persisting",
+      "evidence": "浮层能力检查降级仍写「附在窗口卡内的静态块」，形态 C 不建窗口，其摘要条在普通 USER 块上，降级挂载位置仍未定义。",
+      "current_id": "R3-3"
+    },
+    {
+      "id": "R2-6",
+      "status": "persisting",
+      "evidence": "浮层关闭条件仍写「`Escape` 与 `tlscroll` 滚动关闭」，未写明监听 `.tlscroll` 容器的 `scroll` 事件。",
+      "current_id": "R3-4"
+    },
+    {
+      "id": "R2-7",
+      "status": "persisting",
+      "evidence": "Problem Statement 中 `loop.ts:854` 的链接仍为 `Cortico-main/src/core/loop.ts:854` 相对形式，与同文其他绝对路径链接不一致。",
+      "current_id": "R3-5"
+    },
+    {
+      "id": "R2-8",
+      "status": "resolved",
+      "evidence": "§2 不再写「与 `withText` 同处调用」，只规定 `rebuildTail()` 替换 item 文本时清 `internals`；Next Steps 3 同样把范围限定在 `rebuildTail()`，loop.ts:1439 的追加文本调用不再被波及。",
+      "current_id": null
+    }
+  ]
+}

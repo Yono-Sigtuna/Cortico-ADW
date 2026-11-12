@@ -1,0 +1,43 @@
+node_modules/
+__pycache__/
+.env
+*.log
+# 仅排除根目录产物;tests/fixtures/ 中的 dist/ 文件需要纳入版本控制。
+/dist/
+
+# 本仓库只公开 deployments/example 模板。真实部署目录含私有配置、密钥、
+# Memory 与运行数据，一律不入库。
+/deployments/*
+!/deployments/example/
+/deployments/*/data/
+/deployments/*/secrets.local.json
+/deployments/*/.env
+/deployments/providers/*/.env
+/deployments/*/avatar.png
+/deployments/*/voices/
+/deployments/*/memory/.git/
+
+# 旧布局的私有运行数据与备份。
+bots/*/data/
+bots/*/workspace*/
+bots/*/avatar.png
+bots/*/voices/
+bots/*/config.json
+bots/*/config.json.bak-*
+deprecated/
+
+# 本机部署的第三方运行时体积较大，且不属于源码。
+runtime/
+local-resources/
+Cortico-Resources/
+
+# 临时工作区。
+scratch/
+
+# WebUI 装的扩展(npm 包)，属部署状态。
+/extensions/
+# 扩展市场登录 GitHub 的令牌存在扩展目录里。
+github-token.json
+
+# Corti 运维目录(数据归档+复盘)，不入库。
+CortiV-DataAnalysis/

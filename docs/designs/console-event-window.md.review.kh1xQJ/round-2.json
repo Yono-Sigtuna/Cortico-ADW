@@ -1,0 +1,153 @@
+{
+  "version": 2,
+  "round": 2,
+  "document": "C:\\Cortico\\Cortico-main\\docs\\designs\\console-event-window.md",
+  "quality_score": 7,
+  "dimensions": {
+    "completeness": "ISSUES",
+    "consistency": "ISSUES",
+    "clarity": "ISSUES",
+    "scope": "PASS",
+    "feasibility": "PASS"
+  },
+  "findings": [
+    {
+      "id": "R2-1",
+      "dimension": "consistency",
+      "severity": "blocking",
+      "changed_text": "整段显示并标 `S.evwinStale`",
+      "problem": "§2 新增的兜底要标 `S.evwinStale`，但 §4 与 Next Steps 8 都只列了 7 条字符串（evwinSummary / evwinEvents / evwinPrompts / evwinNoPrompts / evwinNoMeta / evwinCopy / evwinCopied），没有 evwinStale；边界表又写成硬编码的「标\"引用已失效\"」。`strings.ts` 里 `zh` 是基准类型、`S` 由它导出，照 §4 只加 7 条会让 `S.evwinStale` 过不了 typecheck（Success Criteria 把 `pnpm typecheck:web` 列为验收项），同一状态还在文档里出现了两种呈现方式。",
+      "remedy": "把 §4 与 Next Steps 8 的键数改为 8 并补上 `evwinStale`（或 §2 改用已列出的键），同时把边界表那一格改成同一个键，三处一致。"
+    },
+    {
+      "id": "R2-2",
+      "dimension": "consistency",
+      "severity": "blocking",
+      "changed_text": "delete entry.context.frame;",
+      "problem": "`context.frame` 不只是给控制台看的元数据：`requeueUndelivered()`（[loop.ts:919-923](C:/Cortico/Cortico-main/src/core/loop.ts:919)）靠 session 记录上的 `context.frame.events[].cursor` 判断「已投递但水位之后的事件已经进了上下文」，以避免重启补投重复。`rebuildTail()` 的折叠结果会经 `clampTail()` → `performHandoff()` 的 `session.reset()` 持久化回 session（[loop.ts:1699-1700](C:/Cortico/Cortico-main/src/core/loop.ts:1699)、[loop.ts:1729](C:/Cortico/Cortico-main/src/core/loop.ts:1729)）。按 §2 在折叠时 `delete context.frame`，一条超长事件帧回执（或 inUser 模式下的 user 消息）的已投递游标就丢了；重启时若水位因更早的未投递事件停在缺口上，这些已投递事件会被重新补投，模型上下文出现重复事件。§2 只考虑了浮层切片，没考虑这个既有消费者。另：`withText()` 返回的新记录与原记录共享 `context` 对象引用，直接 `delete entry.context.frame` 会连带改到快照和其他引用同一 context 的记录。",
+      "remedy": "折叠时不要整段删除 frame：保留 `cursor/ts/type/source`（重启去重需要），只让切片失效——例如给 `FrameEventRef` 加 `stale: true`（或去掉 `start/chars`），`windowText()` 判 stale 后整段显示；或者把已投递游标迁到独立字段并同步修改 `requeueUndelivered()`。同时在删除前复制 `context`，避免修改共享对象。"
+    },
+    {
+      "id": "R2-3",
+      "dimension": "completeness",
+      "severity": "blocking",
+      "changed_text": "`signal` abort 时移除面板并清定时器",
+      "problem": "浮层的生命周期只覆盖了 `signal` abort（卸载），没有覆盖 `rebuild()`。fork 视图每 3 秒轮询一次 `timeline.rebuild()`（[fork.ts:153](C:/Cortico/Cortico-main/src/web/client/features/live/fork.ts:153)），`session.reset`、重连 hello、切回主 session 也都会整份重画；`rebuild()` 用 `inner.replaceChildren()` 换掉锚点节点（[timeline.ts:576](C:/Cortico/Cortico-main/src/web/client/features/live/timeline.ts:576)），body 上的面板不在被替换的子树里，锚点上的 `mouseleave` 监听随节点失效，面板会停在原地显示旧内容（点击固定后尤其明显），直到用户滚动或按 Escape。设计自己把 `rebuild()` 列为轮询路径，却没有规定重画时关闭浮层。",
+      "remedy": "在 `rebuild()` 入口（包括空 session 早退与 keepScroll 早退之前）关闭并移除面板、清掉延迟关闭定时器；补进边界表与测试（例如重画后 `document.body` 上不再有 `.evpop`）。"
+    },
+    {
+      "id": "R2-4",
+      "dimension": "clarity",
+      "severity": "minor",
+      "changed_text": "三条渲染路径必须同形状：`rebuild()`（整份重画／轮询）、`append()`（实时帧）、`f.messages`（fork）",
+      "problem": "Constraints 写「三条渲染路径必须同形状：rebuild()、append()、f.messages（fork）」，Success Criteria 写「f.session、f.messages、rebuild、append 四条入口/路径渲染一致」：约束里 f.session 消失，f.messages 又被称作路径，两处枚举不一致，实现者无法确定同形状的验收面到底是三条还是四条。",
+      "remedy": "统一说法：两条入口（f.session、f.messages）× 两条路径（rebuild、append），或两处都直接列出相同的四处。"
+    },
+    {
+      "id": "R2-5",
+      "dimension": "clarity",
+      "severity": "minor",
+      "changed_text": "否则降级为附在窗口卡内的静态块",
+      "problem": "浮层降级写「附在窗口卡内的静态块」，但形态 C 明确「不建窗口」，它的摘要条在普通 USER 块上；测试桩（无 `getBoundingClientRect`）下形态 C 的浮层降级到哪里没有定义，而 Next Steps 9 又要测「内部唤醒落单」与内容/复制。",
+      "remedy": "改成「附在宿主卡片内（窗口卡或形态 C 的 USER 块）」，并说明形态 C 的静态块挂在哪一层。"
+    },
+    {
+      "id": "R2-6",
+      "dimension": "clarity",
+      "severity": "minor",
+      "changed_text": "`Escape` 与 `tlscroll` 滚动关闭",
+      "problem": "`tlscroll` 在代码里只是滚动容器的 class（[timeline.ts:117](C:/Cortico/Cortico-main/src/web/client/features/live/timeline.ts:117)），并没有同名事件；「`tlscroll` 滚动关闭」读起来像在监听一个自定义事件，监听目标和事件名不明确。",
+      "remedy": "写明监听 `.tlscroll` 容器的 `scroll` 事件（可复用现有 shouldStick 监听或另挂一个），或改成「时间线滚动时关闭」。"
+    },
+    {
+      "id": "R2-7",
+      "dimension": "clarity",
+      "severity": "minor",
+      "changed_text": "（[src/core/loop.ts:854](Cortico-main/src/core/loop.ts:854)）",
+      "problem": "本轮把 loop.ts:854 的链接从绝对路径改成了相对路径 `Cortico-main/src/core/loop.ts:854`；从 `docs/designs/` 解析会指向不存在的 `docs/designs/Cortico-main/...`，同文其他链接（如 [loop.ts:201]、[loop.ts:847]）仍是 `C:/Cortico/...` 形式。",
+      "remedy": "恢复成与其他链接一致的绝对路径，或统一改成正确的相对路径（`../../src/core/loop.ts`）。"
+    },
+    {
+      "id": "R2-8",
+      "dimension": "clarity",
+      "severity": "minor",
+      "changed_text": "（与 `withText` 同处调用，两行）",
+      "problem": "§2 说「与 `withText` 同处调用」，Next Steps 3 写「`src/core/truncate.ts` / `withText` 调用处」；`withText` 还有一个调用点是 [loop.ts:1439](C:/Cortico/Cortico-main/src/core/loop.ts:1439)（把 soft 轮提示追加到回执末尾），那里原文前缀保留、`start/chars` 仍有效，若按字面在所有 `withText` 调用处清理会误删有效元数据。",
+      "remedy": "把范围限定为 `rebuildTail()` 的两处替换（折叠与超限），并说明追加文本不清理；或把失效逻辑放进 `rebuildTail()` 内部而不是泛化到 `withText`。"
+    }
+  ],
+  "prior": [
+    {
+      "id": "R1-1",
+      "status": "resolved",
+      "evidence": "§0 数据表与 §3 形态 A 步骤 2/3：窗口在 `renderToolCall()` 建卡时头部先留 `—`，等 `renderToolResult()` 拿到同 call_id 的回执后再从 `context.frame?.events` 填时间与事件数。",
+      "current_id": null
+    },
+    {
+      "id": "R1-2",
+      "status": "resolved",
+      "evidence": "§3 形态 B：`renderWorld()` 见 `context.frame?.events?.length > 0` 就直接建完整窗口（提示段 + 事件段），走同一个组件。",
+      "current_id": null
+    },
+    {
+      "id": "R1-3",
+      "status": "resolved",
+      "evidence": "§3 形态 C、边界表与 Success Criteria 三处统一：内部唤醒是普通 USER 块 + 可 hover 摘要条，时间取 `internals[0].ts` → `context.ts` → `—`。",
+      "current_id": null
+    },
+    {
+      "id": "R1-4",
+      "status": "resolved",
+      "evidence": "§2 新增服务端作废引用（折叠/超限时清 `frame`/`internals`）与前端 `windowText()` 越界校验，边界表新增「文本被 rebuildTail 替换」一行；Success Criteria 也改为只降级不抛错。",
+      "current_id": null
+    },
+    {
+      "id": "R1-5",
+      "status": "resolved",
+      "evidence": "浮层新增能力检查（`typeof el.getBoundingClientRect === 'function'`），缺席时降级为卡内静态块；Constraints 明确 FakeEl 没有该 API，边界表与 Next Steps 同步。",
+      "current_id": null
+    },
+    {
+      "id": "R1-6",
+      "status": "resolved",
+      "evidence": "§3 形态 A 步骤 3 子条明确回执缺 `frame`（MISSING_RESULT_RESTART、折叠、配对修复）时事件区显示 `S.evwinNoMeta`、不抛错；边界表与 Success Criteria 一致。",
+      "current_id": null
+    },
+    {
+      "id": "R1-7",
+      "status": "resolved",
+      "evidence": "浮层新增「生命周期」段：所有监听挂 `{signal}`、延迟关闭定时器句柄在闭包里、abort 时移除面板并清定时器；边界表新增卸载行，Next Steps 9 要求测卸载后监听归零。",
+      "current_id": null
+    },
+    {
+      "id": "R1-8",
+      "status": "resolved",
+      "evidence": "Constraints 不再写具体语言数，改为「其余语言是 `Partial`，缺失自动回落，不必逐个补」。",
+      "current_id": null
+    },
+    {
+      "id": "R1-9",
+      "status": "resolved",
+      "evidence": "浮层条目写明「复制与展开共用一个 `windowText(entry, refs)`」，并指出事件组传 `(outputEntry, outputEntry.context.frame.events)`、提示组传 `(userEntry, userEntry.context.internals)`。",
+      "current_id": null
+    },
+    {
+      "id": "R1-10",
+      "status": "resolved",
+      "evidence": "Success Criteria 改为「比对对象是合并消息里该 ref 的 `[start, start+chars)` 区间（`session-main.jsonl` 里那条 user 消息），不是事件库原文」。",
+      "current_id": null
+    },
+    {
+      "id": "R1-11",
+      "status": "resolved",
+      "evidence": "落单规则写明在任何非窗口记录、`rebuild()` 末尾、所有早退分支之前统一 flush；Next Steps 6 明确含「`rebuild()` 入口清空、早退前 flush」。",
+      "current_id": null
+    },
+    {
+      "id": "R1-12",
+      "status": "resolved",
+      "evidence": "Open Questions 明确三条已按建议落定（事件正文不加时间前缀、hover 开 + 点击固定、不列图片附件），只保留形态 C 是否支持点击展开这一条真正待定问题。",
+      "current_id": null
+    }
+  ]
+}

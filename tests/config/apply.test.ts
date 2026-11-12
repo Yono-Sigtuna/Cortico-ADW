@@ -1,0 +1,11 @@
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';import {tmpdir} from 'node:os';import {join} from 'node:path';
+import {afterEach,expect,it} from 'vitest';import {loadDeployment} from '../../src/deploy.ts';import type {CoreConfig} from '../../src/core/types.ts';import {readSharedConfig,saveSharedConfig} from '../../src/config/shared.ts';
+const roots:string[]=[];afterEach(()=>roots.splice(0).forEach(d=>rmSync(d,{recursive:true,force:true})));
+async function mod(){const m=await import('../../src/config/apply.ts').catch(()=>null);expect(m?.applySavedConfig).toBeTypeOf('function');return m!;}
+function setup(){const r=mkdtempSync(join(tmpdir(),'apply-'));roots.push(r);const d=join(r,'a');mkdirSync(d);mkdirSync(join(r,'shared'));const ref={file:'../shared/config.json',policyFile:'../shared/policy.json',managerUrl:'http://127.0.0.1:7789'};
+writeFileSync(join(d,'deployment.json'),JSON.stringify({bot:'test',sharedConfig:ref}));writeFileSync(join(r,'shared/config.json'),'{"storage":{"retentionMonths":6}}');writeFileSync(join(r,'shared/policy.json'),'{"version":1,"individualPaths":[],"individualPrefixes":[]}');
+return {r,d,ref,loaded:loadDeployment({defaults:()=>({paths:{memory:'memory',data:'data'},storage:{retentionMonths:6}} as CoreConfig)},d)};}
+it('reports startup-captured keys pending restart without pretending to apply',async()=>{const m=await mod();const {r,d,ref,loaded}=setup();const original=loaded.config.storage;const before=readSharedConfig(ref,d);const after=saveSharedConfig(join(r,'shared/config.json'),before.revision,{'storage.retentionMonths':2});
+const result=m.applySavedConfig(loaded,after.revision);expect(result.pendingRestart).toContain('storage.retentionMonths');expect(result.applied).toEqual([]);expect(loaded.config.storage).toBe(original);expect(loaded.config.storage?.retentionMonths).toBe(6);});
+it('rejects stale application and shared World writes before mutating',async()=>{const m=await mod();const {loaded}=setup();expect(()=>m.applySavedConfig(loaded,'stale')).toThrow(/conflict/i);
+const p=await import('../../src/config/persistence.ts');expect(()=>p.assertIndividualPatch(loaded,{'storage.retentionMonths':2})).toThrow();expect(loaded.config.storage?.retentionMonths).toBe(6);});

@@ -1,0 +1,26 @@
+[
+  {
+    "id": "R3-1",
+    "applied_text": "回执没有 `frame`（`MISSING_RESULT_RESTART`、配对修复）→ 事件区显示 `S.evwinNoMeta`，其余照常，**不抛错**。"
+  },
+  {
+    "id": "R3-2",
+    "applied_text": "- 四条入口/路径必须同形状：`f.session`、`f.messages`、`rebuild()`（整份重画／轮询）、`append()`（实时帧）。"
+  },
+  {
+    "id": "R3-3",
+    "applied_text": "形态 C 挂在那条 USER 块的摘要条之后"
+  },
+  {
+    "id": "R3-4",
+    "applied_text": "或滚动容器 `.tlscroll` 触发 `scroll` 事件时关闭"
+  },
+  {
+    "id": "R3-5",
+    "applied_text": "[src/core/loop.ts:854](C:/Cortico/Cortico-main/src/core/loop.ts:854)"
+  },
+  {
+    "id": "R3-6",
+    "applied_text": "补投逻辑只读 `events[].cursor`，不读 `start / chars`"
+  }
+]

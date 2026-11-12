@@ -1,0 +1,1 @@
+{"extends":"../../tsconfig.json","compilerOptions":{"jsx":"react-jsx","lib":["ES2022","DOM","DOM.Iterable"]},"include":["./**/*.ts","./**/*.tsx","../../tests/household/client.test.ts"],"exclude":["./dist"]}

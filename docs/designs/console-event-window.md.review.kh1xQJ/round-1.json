@@ -1,0 +1,112 @@
+{
+  "version": 2,
+  "round": 1,
+  "document": "C:\\Cortico\\Cortico-main\\docs\\designs\\console-event-window.md",
+  "quality_score": 5,
+  "dimensions": {
+    "completeness": "ISSUES",
+    "consistency": "ISSUES",
+    "clarity": "ISSUES",
+    "scope": "PASS",
+    "feasibility": "ISSUES"
+  },
+  "findings": [
+    {
+      "id": "R1-1",
+      "dimension": "consistency",
+      "severity": "blocking",
+      "changed_text": null,
+      "problem": "事件窗口头部的数据源取错了对象。§2 让 `renderToolCall()` 在遇到 `isEventFrame()` 时建窗口并读 `context.frame.events[0].ts`，但 `renderToolCall()` 拿到的是 `external_event_frame` 的 `function_call` 记录；`context.frame` 只写在配对的 `function_call_output` 上（src/core/loop.ts:850-856：`functionCall(...)` 不带 context，`functionResult(...)` 才带 `frame`）。因此按现文实现，头部的 `HH:MM:SS` 恒为 undefined，`S.evwinSummary(n, m)` 的事件数 n 也无处取得，头部无法生成。",
+      "remedy": "改为在 `renderToolResult()` 拿到带 `context.frame` 的回执时填充/回填头部（该回执随后被填入同一张卡的 slot），或在 `function_call` 记录上另带帧引用；并写明回执缺失时头部的降级显示。"
+    },
+    {
+      "id": "R1-2",
+      "dimension": "consistency",
+      "severity": "blocking",
+      "changed_text": null,
+      "problem": "`inUser` 模式下不存在 `external_event_frame` 的 `function_call`（src/core/loop.ts:710 只在 `!inUser` 时调用 `appendEventFrame`），所以 §2 的 `renderToolCall()`/`isEventFrame()` 建窗口路径在该模式不会触发。但 §4 边界表承诺该模式“一条消息同时有 `internals` 与 `frame`，窗口按‘提示 → 事件’两段显示”。§2 没有给出任何从同一条 user 消息里拆出窗口的前端机制，承诺与实现路径矛盾。",
+      "remedy": "在 `renderWorld()` 里，当 `context.internals` 与 `context.frame` 同时存在时直接构建窗口单元（用 `windowText` 切出提示段与事件段），或删除 §4 该行并明确 `inUser` 模式不建窗口。"
+    },
+    {
+      "id": "R1-3",
+      "dimension": "consistency",
+      "severity": "blocking",
+      "changed_text": null,
+      "problem": "内部唤醒（无外部事件帧）的呈现自相矛盾。§4 说它是“只有 USER 块，头部显示 `HH:MM:SS · 0 条事件 · N 条提示`，仍可 hover 看提示”，但 §2 把头部与浮层都挂在只有事件帧才创建的 `EventWindow` 上，内部唤醒没有这个窗口；Success Criteria 又写“内部唤醒仍显示为普通 USER 块”。同时该场景的 `HH:MM:SS` 来源未指定：事件侧无帧可取，可用的只有 `internals[0].ts`（事件自带 ts，符合 Constraints）或消息的 `context.ts`（ContextLog.append 在 src/protocol/open-responses/context-log.ts:65-68 写入）。",
+      "remedy": "明确内部唤醒的单元形态（普通 USER 块加一行可 hover 的摘要，或独立窗口），并指定时间取 `internals[0].ts`；同步改写 §4 与 Success Criteria，使三处一致。"
+    },
+    {
+      "id": "R1-4",
+      "dimension": "consistency",
+      "severity": "blocking",
+      "changed_text": null,
+      "problem": "截断会替换正文却保留引用，按 `start/chars` 切回不再成立。`rebuildTail()` 在交接时把超过阈值的 `function_call_output` 换成 `[result folded]`、把单条超预算的 message 换成 `[turn too long, omitted]`（src/core/truncate.ts:27-35、51-57），而 `withText()` 只替换 `item`、原样保留 `context`（src/protocol/open-responses/context.ts:64-69）。于是 `context.frame` / `context.internals` 的 `start/chars` 指向被替换后的短文本，浮层会切出空串或错位文本；Success Criteria“复制内容与原文逐字相同（diff 为空）”在这些 session 状态下不成立。",
+      "remedy": "在折叠/超限替换时同时清除或标记失效该记录的 `context.frame` 与 `context.internals`（必要时连 `blobs`），或让 `windowText` 校验 `start + chars <= text.length`，不匹配时回退显示整段/替换标记；并把该情形补进 §4 边界表。"
+    },
+    {
+      "id": "R1-5",
+      "dimension": "feasibility",
+      "severity": "blocking",
+      "changed_text": null,
+      "problem": "浮层定位使用了测试桩不提供的 API，与 Constraints 自相冲突。迷你 DOM 的 `FakeEl`（tests/web/feature-live.test.ts:75-195）没有 `getBoundingClientRect`，而 §2 在 hover 打开浮层时用它算位置；Constraints 又要求“新增交互只能用桩已支持的 API”。一旦交互在测试里被触发就会抛 TypeError；设计只说明“浮层定位不做断言”，没有规定该 API 缺席时代码怎么办。",
+      "remedy": "规定定位前的能力检查与降级（例如 `typeof el.getBoundingClientRect === 'function'` 时才定位，否则落到固定位置或不定位），并说明测试如何在无定位的情况下打开浮层、验证内容与复制。"
+    },
+    {
+      "id": "R1-6",
+      "dimension": "completeness",
+      "severity": "blocking",
+      "changed_text": null,
+      "problem": "事件帧调用可能没有带 `context.frame` 的回执，而 §2 假定它一定有。`bootstrap()` 给未闭合调用补 `MISSING_RESULT_RESTART` 回执（src/core/loop.ts:1011-1017）时不带 frame；`rebuildTail`/`fixPairing` 也可能补出不带 frame 的回执或把 frame 所在回执替换掉。此时按 §2 读 `context.frame.events[0].ts` 会解引用 undefined，窗口渲染抛错。",
+      "remedy": "在窗口构建处把 `context.frame`/`events` 视为可缺失：缺帧时显示“无事件元数据”并只列提示（或退回现有回执文本），不得抛错；补进 §4 边界表。"
+    },
+    {
+      "id": "R1-7",
+      "dimension": "completeness",
+      "severity": "blocking",
+      "changed_text": null,
+      "problem": "body 级浮层的生命周期没有收尾。§2 把浮层挂到 `document.body`，并用 mouseenter/mouseleave（150ms 延迟关闭）、点击固定、`Escape`/滚动关闭；设计没有说明时间线卸载（`lifecycle.dispose()`/路由离开）时移除面板、取消延迟关闭定时器与监听。既有卸载用例要求监听归零（tests/web/feature-live.test.ts:1203-1225），而 body 上的面板不在 feature root 内，会残留并在下次挂载/别的页面里可见。",
+      "remedy": "在 dispose/卸载时移除面板节点、取消延迟关闭定时器，并让所有监听挂到 `signal` 上；把该清理补进 §4 边界表与测试用例。"
+    },
+    {
+      "id": "R1-8",
+      "dimension": "clarity",
+      "severity": "minor",
+      "changed_text": null,
+      "problem": "语言数量写错。`strings.ts` 除 `zh`、`en` 外还导入 zh-Hant、ja、ko、fr、de、es-419、pt-BR、it、ru 共 9 个 `Partial` 表，不是 Constraints 里说的 8 个（src/web/client/features/live/strings.ts:1-10）。",
+      "remedy": "改为 9，或改写为“其余语言是 `Partial`，缺失自动回落”而不写具体数目。"
+    },
+    {
+      "id": "R1-9",
+      "dimension": "clarity",
+      "severity": "minor",
+      "changed_text": null,
+      "problem": "`windowText(entry)` 的签名说不清两组数据从哪条记录取。提示在 USER 消息（`context.internals`）上；非 `inUser` 模式下事件正文在配对的 `function_call_output`（`context.frame`）上。单一 `entry` 无法同时服务两组，而 §2 只说“用 start/chars 把合并文本按行切回来，浮层正文与复制共用它”。",
+      "remedy": "明确签名（如 `windowText(entry, refs)`），并写明事件组切的是 output 记录的 `frame` 引用、提示组切的是 user 记录的 `internals` 引用。"
+    },
+    {
+      "id": "R1-10",
+      "dimension": "clarity",
+      "severity": "minor",
+      "changed_text": null,
+      "problem": "Success Criteria 的比对对象写错。它说复制内容“按 start/chars 切回后与 session-main.jsonl 原文 diff 为空”，但 `session-main.jsonl` 存的是合并后的整条 user 消息，逐条提示的原始文本在事件库（events）里；按字面执行时比对对象不是“该轮实际注入文本”。",
+      "remedy": "改为“与合并消息中该 ref 的区间比对”或“与事件库中该 cursor 的原文比对”，二选一并写明操作方式。"
+    },
+    {
+      "id": "R1-11",
+      "dimension": "clarity",
+      "severity": "minor",
+      "changed_text": null,
+      "problem": "`pendingPrompts` 的生命周期没有写全。§2 只说“任何非窗口记录到达时（以及 rebuild() 末尾）把 pendingPrompts 落成普通 USER 块”，没有说 `rebuild()` 开始时重置，也没覆盖空 session 早退与 `keepScroll` 早退（src/web/client/features/live/timeline.ts:579-600）；若不清空，上一轮重画留下的已脱离文档的节点可能被吸收进新窗口。",
+      "remedy": "规定 `rebuild()` 入口清空 `pendingPrompts`，并把落单/flush 放在所有早退路径之前（或统一在结尾执行）。"
+    },
+    {
+      "id": "R1-12",
+      "dimension": "clarity",
+      "severity": "minor",
+      "changed_text": null,
+      "problem": "Open Questions 与已提交行为混在一起。§2 已经决定“点击固定”、事件正文不加 `HH:MM` 前缀（正文仍用现有回执文本）、不列图片附件，但 Open Questions 1/2 仍把它们当作待定项并给“建议”。读者无法分辨哪些是待用户确认的发现、哪些是已承诺的行为。",
+      "remedy": "把已按建议落定的项移出 Open Questions（或标注“已按建议采用”），只保留真正待用户决定的问题。"
+    }
+  ],
+  "prior": []
+}

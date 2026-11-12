@@ -1,0 +1,32 @@
+{
+  "displayName": "琥珀协议（示例）",
+  "web": {
+    "port": 7790
+  },
+  "worlds": {
+    "console": {
+      "enabled": true
+    },
+    "qq": {
+      "enabled": false,
+      "wsUrl": "ws://127.0.0.1:3001",
+      "token": "CHANGE_ME",
+      "wakeNames": [
+        "克劳德",
+        "小橙",
+        "琥珀"
+      ],
+      "groups": [
+        {
+          "id": 100000000,
+          "enabled": true
+        }
+      ],
+      "privates": [],
+      "catchupOnStart": true
+    },
+    "websearch": {
+      "enabled": false
+    }
+  }
+}
